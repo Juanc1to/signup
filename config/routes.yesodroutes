@@ -12,3 +12,6 @@
 /comments CommentR POST
 
 /profile ProfileR GET
+/search EventSeriesListR GET
+/event/#EventSeriesId EventSeriesR GET POST
+/event/details/#EventId EventR GET

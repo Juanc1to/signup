@@ -1,0 +1,9 @@
+$forall (Entity id series_description) <- series_descriptions
+  <h1>#{eventSeriesName series_description}
+  <table>
+    <tr>
+      <th>Venue
+      <td>#{eventSeriesVenue series_description}
+    <tr>
+      <th>Description
+      <td>#{eventSeriesDescription series_description}

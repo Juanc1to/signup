@@ -16,3 +16,29 @@ Comment json -- Adding "json" causes ToJSON and FromJSON instances to be derived
     userId UserId Maybe
     deriving Eq
     deriving Show
+EventSeries
+  name Text
+  venue Text
+  description Text
+  -- firstDay Day
+  primeStartTime TimeOfDay
+  seriesPattern Text -- e.g. "xxDDxxxxxD" means that including the `firstDateTime`, this event series has a ten-day repeating cycle where events happen on the third, fourth, and tenth days of the cycle. "D"s represent event days, any other character represents a non-event day.
+  finalDay Day -- you can adjust this to extend the series
+RoleDetails
+  eventSeriesId EventId
+  description Text
+  offsetTime Int -- minutes from the series `primeStartTime` when this role is needed; could make the role happen on a different day, could even be a role that happens *before* the `primeStartTime` of the event instance.
+  desiredNrParticipants Int -- the number of participants requested for this role; more could sign up than this, though.  If this is 0, that's fine, but you might want to indicate what that means in the description (e.g. maybe you have a predefined set of people for this role, or maybe it's optional).  TODO: change this to participants instead of volunteers, and rename the whole project to something like "signups".
+Event
+  eventSeriesId EventSeriesId
+  eventDay Day -- basically so we don't have to compute it every time
+Role
+  roleDetailsId RoleDetailsId
+  eventId EventId
+Participant
+  roleId RoleId
+  name Text
+  email Text Maybe
+  phone Text Maybe
+  willingToBottomline Bool Maybe
+  feelings Text Maybe
