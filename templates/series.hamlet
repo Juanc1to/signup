@@ -1,0 +1,16 @@
+<h2>
+  <a href=@{EventSeriesR eventSeriesId}>#{eventSeriesName eventSeries}
+<table>
+  <tr>
+    <th>Venue
+    <td>#{eventSeriesVenue eventSeries}
+  <tr>
+    <th>Description
+    <td>#{eventSeriesDescription eventSeries}
+$if not $ null events
+  <p>Existing events in this series:
+  <ul>
+    $forall Entity eventId event <- events
+      <li>
+        <a href=@{EventR eventId}>#{show $ eventEventDay event}
+^{formSection}

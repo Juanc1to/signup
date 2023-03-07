@@ -1,5 +1,6 @@
 $forall (Entity id series_description) <- series_descriptions
-  <h1>#{eventSeriesName series_description}
+  <h2>
+    <a href=@{EventSeriesR id}>#{eventSeriesName series_description}
   <table>
     <tr>
       <th>Venue

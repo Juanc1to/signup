@@ -1,14 +1,19 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 module Handler.EventSeries where
 
-import Import hiding (concat, length, zip, undefined, trace, (.), (++))
+import Import -- hiding (concat, length, zip, undefined
+                --     , take, trace, (.), (++))
 import Data.Time
-import Data.Time.Calendar
-import Data.Either
 import qualified Text.Read as TR
 import qualified Data.Text as T
 import qualified Data.List as L
 import Safe
-import Debug.Trace
+-- import Debug.Trace
 
 sequenceAL :: Applicative f => [f a] -> f [a]
 sequenceAL [] = pure []
@@ -87,18 +92,18 @@ increments
   -> Int -- | How much to add to each starting point each time
   -> [Int] -- | An infinite series of Ints formed by incrementing the starting points
 increments starts augment =
-  concat $ iterate ((augment +) <$>) starts
+  concat $ L.iterate ((augment +) <$>) starts
 
 repeatDaySeriesAnchored
   :: Day -- | The first day of the series
   -> Text -- | The pattern of repeating events for the series.  E.g. "xxDDxxxxxD" means that including the first day of the series, this event series has a ten-day repeating cycle where events happen on the third, fourth, and tenth days of the cycle. "D"s represent event days, any other character represents a non-event day.  If the pattern contains no "D"s, then one will be appended!
   -> Day -- | The reference point past which to look for new events in the series (e.g. today)
   -> [Day] -- | Infinite sequence of Days following the reference day and matching the pattern.
-repeatDaySeriesAnchored first pattern reference =
+repeatDaySeriesAnchored firstDay pattern reference =
   let pattern'
         | T.elem 'D' pattern = pattern
         | otherwise = T.snoc pattern 'D'
-      breakpoint = mod (fromIntegral $ diffDays reference first)
+      breakpoint = mod (fromIntegral $ diffDays reference firstDay)
                        $ T.length pattern'
       adjustedPattern = T.append (T.drop breakpoint pattern')
                                  $ T.take breakpoint pattern'
@@ -109,14 +114,14 @@ repeatDaySeriesAnchored first pattern reference =
 -- maybe call this daysOfMonthForDayOfWeek ?
 -- maybe drop the referenceDay argument?
 dayOfWeekLaterInMonth :: DayOfWeek -> Day -> [DayOfMonth]
-dayOfWeekLaterInMonth dayOfWeek referenceDay =
-  let resultDay = firstDayOfWeekOnAfter dayOfWeek referenceDay
-      (_, refmonth, refday) = toGregorian referenceDay
+dayOfWeekLaterInMonth chosenDayOfWeek referenceDay =
+  let resultDay = firstDayOfWeekOnAfter chosenDayOfWeek referenceDay
+      (_, refmonth, _) = toGregorian referenceDay
       (resyear, resmonth, resday) = toGregorian resultDay
       resultL
         | resmonth /= refmonth = []
         | (gregorianMonthLength resyear resmonth) == resday = []
-        | otherwise = resday : (dayOfWeekLaterInMonth dayOfWeek
+        | otherwise = resday : (dayOfWeekLaterInMonth chosenDayOfWeek
                                $ addDays 1
                                $ fromGregorian resyear resmonth resday)
   in resultL
@@ -159,8 +164,53 @@ repeatDaySeries selector referenceDay =
     (Right (SeriesSelector monthL dayOfMonthL dayOfWeekL)) ->
       Right $ repeatDaySeries' (sort monthL) dayOfMonthL dayOfWeekL referenceDay
 
+data FutureEventDay = FutureEventDay { futureDay :: Day }
+
+futureDateForm :: [Day] -> Form FutureEventDay
+--futureDateForm :: [Day] -> Html
+--                  -> MForm Handler (FormResult FutureEventDay, Widget)
+futureDateForm dateOptions = renderDivs $ FutureEventDay
+  <$> areq (selectFieldList $ (\ d -> (T.pack . show $ d, d)) <$> dateOptions)
+           "Day" Nothing
+
 getEventSeriesR :: EventSeriesId -> Handler Html
-getEventSeriesR eventSeriesId = error "Not yet implemented: getEventSeriesR"
+getEventSeriesR eventSeriesId = do
+  eventSeries <- runDB $ get404 eventSeriesId
+  events <- runDB $ selectList [EventEventSeriesId ==. eventSeriesId]
+                               [Desc EventEventDay]
+  today <- utctDay <$> liftIO getCurrentTime
+  let formSection = case (take 10)
+          <$> repeatDaySeries (eventSeriesSeriesPattern eventSeries) today of
+        (Left errorMessage) -> do
+          [whamlet|<p>Could not establish future dates: #{errorMessage}|]
+        (Right dates) -> do
+          [whamlet|
+            <form method=post action=@{EventSeriesR eventSeriesId}>
+              <select name=selectedDay>
+                $forall date <- show <$> dates
+                  <option value=#{date}>#{date}
+              <button>Open this event
+          |]
+  defaultLayout $ do
+    setTitle . toHtml $ T.pack "Event series"
+    $(widgetFile "series")
 
 postEventSeriesR :: EventSeriesId -> Handler Html
-postEventSeriesR eventSeriesId = error "Not yet implemented: postEventSeriesR"
+postEventSeriesR eventSeriesId = do
+  futureEventDay <- runInputPost $ FutureEventDay
+    <$> ireq dayField "selectedDay"
+  maybeEventId <- runDB $ selectFirst
+                          [EventEventSeriesId ==. eventSeriesId
+                          , EventEventDay ==. futureDay futureEventDay] []
+  case maybeEventId of
+        (Just (Entity eventId _)) -> redirect $ EventR eventId
+        Nothing -> do
+          eventId <- runDB $ insert $ Event eventSeriesId
+                     $ futureDay futureEventDay
+          redirect $ EventR eventId
+      {-let eventId = case maybeEventId of
+            (Just (Entity id _)) -> id
+            Nothing -> do
+              id <- runDB $ insert $ Event eventSeriesId $ futureDay futureEventDay
+              id
+      redirect $ EventR eventId-}
