@@ -7,6 +7,7 @@
 module Handler.Event where
 
 import Import
+import qualified Data.Set as S
 import qualified Data.Text as T
 import Data.Time
 import qualified Text.Read as R
@@ -14,12 +15,35 @@ import qualified Text.Read as R
 roleDetailsForm :: LocalTime -> RoleDetails -> RoleId -> [Participant] -> Widget
 roleDetailsForm eventStart roleDetails roleId participants = do
   let roleIdVal = either (flip const $ "") id $ maybe (Left "empty list") fromPersistValueText $ headMay $ keyToValues roleId
-      ident = "id" <> roleIdVal
+      signupId = "signup" <> roleIdVal
+      bottomLineId = "bottomline" <> roleIdVal
+      formatTime' = formatTime defaultTimeLocale
+      fullTimeFormatString = "on %A, %B %-e at %-l:%M%P (%H%M)" -- or just `rfc822DateFormat`?
+      roleStartMinutes = roleDetailsOffsetTime roleDetails
+      roleStart = addLocalTime
+                  (60 * (fromIntegral roleStartMinutes) :: NominalDiffTime)
+                  eventStart
+      roleStartS = formatTime' fullTimeFormatString roleStart
+      roleDurationMinutes = roleDetailsDuration roleDetails
+      roleEnd = addLocalTime
+                (60 * (fromIntegral $ roleStartMinutes + roleDurationMinutes)
+                      :: NominalDiffTime)
+                eventStart
+      timeOfDayFormatString
+        | localDay roleStart == localDay roleEnd = "at %-l:%M%P (%H%M)"
+        | otherwise = fullTimeFormatString
+      roleEndS = formatTime' timeOfDayFormatString roleEnd
   [whamlet|
     <div style="width: 20%; float: right;">
-      <input type=checkbox id=#{ident} name=signup value=#{roleIdVal}>
-      <label for=#{ident}>Signup for this role
+      <p>
+        <input type=checkbox id=#{signupId} name=signup value=#{roleIdVal}>
+        <label for=#{signupId}>Signup for this role
+      <p>
+        <input type=checkbox id=#{bottomLineId}
+               name=bottomline value=#{roleIdVal}>
+        <label for=#{bottomLineId}>Are you willing to bottomline this role?
     <p>#{roleDetailsDescription roleDetails}
+    <p>Starting #{roleStartS}, ending #{roleEndS}
     <p>Looking for #{show $ roleDetailsDesiredNrParticipants roleDetails} people.
     $if null participants
       <p>No one currently signed up.
@@ -27,7 +51,7 @@ roleDetailsForm eventStart roleDetails roleId participants = do
       <p>Currently signed up:
         $forall participant <- participants
           <span title=#{maybe "" id $ participantFeelings participant}
-            .participant>#{participantName participant}
+            .participant>#{participantFirstName participant}
   |]
 
 eventRoleAndParticipants :: MonadIO m => EventId -> Entity RoleDetails
@@ -63,8 +87,11 @@ getEventR eventId = do
             $forall ((Entity roleId _), (Entity _ roleDetails), participants) <- eventRoleAndParticipantsL
               <div>^{roleDetailsForm primeStartTime roleDetails roleId participants}
             <p>
-              <label for=name>Your name
-              <input id=name name=name>
+              <label for=firstName>Your first name, handle, or nickname
+              <input id=firstName name=firstName>
+            <p>
+              <label for=lastName>Your last name
+              <input id=lastName name=lastName>
             <p>
               <label for=feelings>
                 How are you feeling about signing up for these roles?
@@ -95,27 +122,35 @@ sqlKeysFromEncodings postVals =
                           . R.readEither . T.unpack <$> postVals
   in onlyrights $ keyFromValues <$> int64s
 
-data SignupPerson = SignupPerson { name :: Text
+data SignupPerson = SignupPerson { firstName :: Text
+                                 , lastName :: Maybe Text
                                  , feelings :: Maybe Text
                                  , email :: Maybe Text
                                  , phone :: Maybe Text
                                  }
 
-addParticipant :: MonadIO m => SignupPerson -> RoleId
+addParticipant :: MonadIO m => SignupPerson -> S.Set RoleId -> RoleId
                             -> ReaderT SqlBackend m (Key Participant)
-addParticipant person roleId = do
-  let participant = Participant roleId (name person) (email person)
-                                       (phone person) Nothing (feelings person)
+addParticipant person bottomlineRoleIds roleId = do
+  let participant = Participant roleId (firstName person) (lastName person)
+                                (email person) (phone person)
+                                (Just $ S.member roleId bottomlineRoleIds)
+                                (feelings person)
   insert participant
 
 postEventR :: EventId -> Handler Html
 postEventR eventId = do
   signupPerson <- runInputPost $ SignupPerson
-    <$> ireq textField "name"
+    <$> ireq textField "firstName"
+    <*> iopt textField "lastName"
     <*> iopt textField "feelings"
     <*> iopt textField "email"
     <*> iopt textField "phone"
   signupParams <- (flip keyvals "signup") <$> getPostParams
+  bottomlineParams <- (flip keyvals "bottomline") <$> getPostParams
   let signupRoleKeys = sqlKeysFromEncodings signupParams :: [Key Role]
-  _ <- runDB . sequence $ addParticipant signupPerson <$> signupRoleKeys
+  let bottomlineRoleKeys = sqlKeysFromEncodings bottomlineParams :: [Key Role]
+  _ <- runDB . sequence $ addParticipant signupPerson
+                                         (S.fromList bottomlineRoleKeys)
+                        <$> signupRoleKeys
   redirect $ EventR eventId

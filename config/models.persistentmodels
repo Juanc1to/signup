@@ -31,6 +31,8 @@ RoleDetails
   offsetTime Int -- minutes from the series `primeStartTime` when this role is needed; could make the role happen on a different day, could even be a role that happens *before* the `primeStartTime` of the event instance.
   duration Int
   desiredNrParticipants Int -- the number of participants requested for this role; more could sign up than this, though.  If this is 0, that's fine, but you might want to indicate what that means in the description (e.g. maybe you have a predefined set of people for this role, or maybe it's optional).  TODO: change this to participants instead of volunteers, and rename the whole project to something like "signups".
+-- TODO: add a feature in which the role details can indicate that the time and duration represent a *window* in which the role can be executed.
+-- TODO: add a feature in which role details can indicate that the role should be active or inactive; this would allow "configuring" an event series without having to end the series and create a new one.  Currently you could modify an instance of role details, but that would retroactively apply the new details to historic events.  As such, we might want to consider role details (and, potentially every entity in the database) as basically immutable (to the best of our ability).
 Event
   eventSeriesId EventSeriesId
   eventDay Day -- basically so we don't have to compute it every time
@@ -39,7 +41,8 @@ Role
   eventId EventId
 Participant
   roleId RoleId
-  name Text
+  firstName Text
+  lastName Text Maybe
   email Text Maybe
   phone Text Maybe
   willingToBottomline Bool Maybe
