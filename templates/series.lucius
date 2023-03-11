@@ -1,0 +1,89 @@
+@highlightcolor: #aac;
+
+div.roles {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+
+  > * {
+    border: 2px solid #{highlightcolor};
+    padding: 5px;
+    margin-bottom: 10px;
+
+    h3 {
+      margin-top: 0px;
+      font-size: larger;
+      font-weight: bold;
+    }
+
+    p:last-child {
+      margin-bottom: 0px;
+    }
+  }
+}
+
+p.participants {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 3px;
+}
+
+span.participant {
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  align-items: center;
+  width: 2.3em;
+  height: 2.3em;
+  background-color: #aca;
+  border: 2px solid #696;
+}
+
+span.participant.bottomline {
+  border-color: #363;
+}
+
+div#participant {
+  width: 500px;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  row-gap: 3px;
+  align-items: start;
+
+  > button {
+    grid-column-start: 2;
+  }
+}
+
+/* div.roles > * {
+  border: 2px solid #{highlightcolor};
+  padding: 5px;
+  margin-bottom: 10px;
+} */
+
+div.signup {
+  background-color: #{highlightcolor};
+}
+
+@media all and (max-width: 500px) {
+  div.roles {
+    grid-template-columns: 1fr;
+  }
+
+  div.details {
+    margin-bottom: 0px;
+  }
+
+  div#participant {
+    width: 100%;
+    grid-template-columns: 1fr;
+
+    > button {
+      grid-column-start: 1;
+    }
+  }
+}
+
+th, td {
+  padding: 0px 5px 5px 0px;
+}

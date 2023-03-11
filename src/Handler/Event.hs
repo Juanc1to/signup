@@ -14,7 +14,9 @@ import qualified Text.Read as R
 
 roleDetailsForm :: LocalTime -> RoleDetails -> RoleId -> [Participant] -> Widget
 roleDetailsForm eventStart roleDetails roleId participants = do
-  let roleIdVal = either (flip const $ "") id $ maybe (Left "empty list") fromPersistValueText $ headMay $ keyToValues roleId
+  let roleIdVal = either (flip const $ T.empty) id
+                  $ maybe (Left "empty list") fromPersistValueText
+                  $ headMay $ keyToValues roleId
       signupId = "signup" <> roleIdVal
       bottomLineId = "bottomline" <> roleIdVal
       formatTime' = formatTime defaultTimeLocale
@@ -33,8 +35,31 @@ roleDetailsForm eventStart roleDetails roleId participants = do
         | localDay roleStart == localDay roleEnd = "at %-l:%M%P (%H%M)"
         | otherwise = fullTimeFormatString
       roleEndS = formatTime' timeOfDayFormatString roleEnd
+      participantSummary p9t = participantFirstName p9t
+        <> maybe "" ((maybe "" (\ (c, _) -> " " <> singleton c <> "."))
+                    . T.uncons) (participantLastName p9t)
+        <> maybe "" (":" <>) (participantFeelings p9t)
+      participantInfoL = (\ p9t ->
+          (p9t
+          , participantSummary p9t
+          , maybe "" (singleton . fst) (T.uncons $ participantFirstName p9t)
+            -- <> maybe "" ((fst <$>) . (>>= T.uncons)) (participantLastName p9t)
+            <> maybe T.empty (singleton . fst) (participantLastName p9t >>= T.uncons)
+          )) <$> participants
   [whamlet|
-    <div style="width: 20%; float: right;">
+    <div .details>
+      <h3>#{roleDetailsDescription roleDetails}
+      <p>Starting #{roleStartS}, ending #{roleEndS}
+      <p>Looking for #{show $ roleDetailsDesiredNrParticipants roleDetails} people.
+      $if null participants
+        <p>No one currently signed up.
+      $else
+        <p .participants>Currently signed up:
+          $forall (participant, summary, initials) <- participantInfoL
+            <span
+              :maybe False id $ participantWillingToBottomline participant:.bottomline
+              title=#{summary} .participant>#{initials}
+    <div .signup>
       <p>
         <input type=checkbox id=#{signupId} name=signup value=#{roleIdVal}>
         <label for=#{signupId}>Signup for this role
@@ -42,16 +67,6 @@ roleDetailsForm eventStart roleDetails roleId participants = do
         <input type=checkbox id=#{bottomLineId}
                name=bottomline value=#{roleIdVal}>
         <label for=#{bottomLineId}>Are you willing to bottomline this role?
-    <p>#{roleDetailsDescription roleDetails}
-    <p>Starting #{roleStartS}, ending #{roleEndS}
-    <p>Looking for #{show $ roleDetailsDesiredNrParticipants roleDetails} people.
-    $if null participants
-      <p>No one currently signed up.
-    $else
-      <p>Currently signed up:
-        $forall participant <- participants
-          <span title=#{maybe "" id $ participantFeelings participant}
-            .participant>#{participantFirstName participant}
   |]
 
 eventRoleAndParticipants :: MonadIO m => EventId -> Entity RoleDetails
@@ -84,25 +99,22 @@ getEventR eventId = do
       formSection =
         [whamlet|
           <form method=post action=@{EventR eventId}>
-            $forall ((Entity roleId _), (Entity _ roleDetails), participants) <- eventRoleAndParticipantsL
-              <div>^{roleDetailsForm primeStartTime roleDetails roleId participants}
-            <p>
+            <div .roles>
+              $forall ((Entity roleId _), (Entity _ roleDetails), participants) <- eventRoleAndParticipantsL
+                ^{roleDetailsForm primeStartTime roleDetails roleId participants}
+            <div #participant>
               <label for=firstName>Your first name, handle, or nickname
               <input id=firstName name=firstName>
-            <p>
               <label for=lastName>Your last name
               <input id=lastName name=lastName>
-            <p>
               <label for=feelings>
                 How are you feeling about signing up for these roles?
               <input id=feelings name=feelings>
-            <p>
               <label for=email>Your email address
               <input id=email name=email>
-            <p>
               <label for=phone>Your phone number
               <input id=phone name=phone>
-            <button>Sign up
+              <button>Sign up
         |]
   defaultLayout $ do
     setTitle . toHtml $ T.pack "Signup for this event"
